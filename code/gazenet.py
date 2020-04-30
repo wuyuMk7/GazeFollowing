@@ -67,7 +67,9 @@ class GazeNet(nn.Module):
         self.face_process = nn.Sequential(nn.Linear(2048, 512),
                                           nn.ReLU(inplace=True))
 
-        self.fpn_net = FPN()
+        #self.fpn_net = FPN()
+        self.fpn_nets = [ FPN() for _ in range(16) ]
+        self.fpn_net = self.fpn_nets[0]
 
         self.eye_position_transform = nn.Sequential(nn.Linear(2, 256),
                                                     nn.ReLU(inplace=True))
@@ -80,13 +82,31 @@ class GazeNet(nn.Module):
        
         # change first conv layer for fpn_net because we concatenate 
         # multi-scale gaze field with image image 
-        conv = [x.clone() for x in self.fpn_net.resnet.conv1.parameters()][0]
-        new_kernel_channel = conv.data.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
-        new_kernel = torch.cat((conv.data, new_kernel_channel), 1)
-        new_conv = nn.Conv2d(6, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        new_conv.weight.data = new_kernel
-        self.fpn_net.resnet.conv1 = new_conv
+        # conv = [x.clone() for x in self.fpn_net.resnet.conv1.parameters()][0]
+        # new_kernel_channel = conv.data.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+        # new_kernel = torch.cat((conv.data, new_kernel_channel), 1)
+        # new_conv = nn.Conv2d(6, 64, kernel_size=7, stride=2, padding=3,
+        #                        bias=False)
+        # new_conv.weight.data = new_kernel
+        # self.fpn_net.resnet.conv1 = new_conv
+
+        for i in range(16):
+            conv = [x.clone() for x in self.fpn_net.resnet.conv1.parameters()][0]
+            new_kernel_channel = conv.data.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+            new_kernel = torch.cat((conv.data, new_kernel_channel), 1)
+            new_conv = nn.Conv2d(6, 64, kernel_size=7, stride=2, padding=3,
+                                   bias=False)
+            new_conv.weight.data = new_kernel
+            self.fpn_nets[i].resnet.conv1 = new_conv
+
+    def change_fpn(self, idx):
+        self.fpn_net = self.fpn_nets[idx]
+
+    # Copy FPN weights from the first model to the others
+    def transfer_fpn_weights(self):
+        for i in range(len(self.fpn_nets)):
+            if i > 0:
+                self.fpn_nets[i].load_state_dict(self.fpn_nets[0].state_dict())
 
     def forward(self, x):
         image, face_image, gaze_field, eye_position = x
