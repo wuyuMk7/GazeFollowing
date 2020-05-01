@@ -91,7 +91,7 @@ class GazeNet(nn.Module):
         # self.fpn_net.resnet.conv1 = new_conv
 
         for i in range(16):
-            conv = [x.clone() for x in self.fpn_net.resnet.conv1.parameters()][0]
+            conv = [x.clone() for x in self.fpn_nets[i].resnet.conv1.parameters()][0]
             new_kernel_channel = conv.data.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
             new_kernel = torch.cat((conv.data, new_kernel_channel), 1)
             new_conv = nn.Conv2d(6, 64, kernel_size=7, stride=2, padding=3,
@@ -140,6 +140,7 @@ class GazeNet(nn.Module):
         gaze_field_map_2 = torch.pow(gaze_field_map, 2)
         gaze_field_map_3 = torch.pow(gaze_field_map, 5)
         image = torch.cat([image, gaze_field_map, gaze_field_map_2, gaze_field_map_3], dim=1)
+        #heatmap = self.fpn_net(image)
         heatmap = self.fpn_net(image)
 
         return direction, heatmap

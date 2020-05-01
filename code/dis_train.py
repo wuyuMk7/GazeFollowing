@@ -436,6 +436,20 @@ def main():
     net = DataParallel(net)
     net.cuda()
 
+    
+    #print(next(net.module.fpn_net.parameters()).is_cuda)
+    ##print(next(net.module.fpn_net.parameters()).is_cuda)
+    area_count = 8
+    area_in_network = int(16/area_count)
+    fpn_weights_transferred = False
+    for i in range(area_count):
+        net.module.change_fpn(i)
+        if not next(net.module.fpn_net.parameters()).is_cuda:
+            net.module.fpn_net.cuda()
+    net.module.change_fpn(0)
+    ##print(next(net.module.fpn_net.parameters()).is_cuda)
+    #exit(0)
+
     resume_training = False
     if resume_training:
         pretrained_dict = torch.load('../model/pretrained_model.pkl')
@@ -469,7 +483,7 @@ def main():
     lr_scheduler_s2 = optim.lr_scheduler.StepLR(optimizer_s2, step_size=5, gamma=0.1, last_epoch=-1)
     lr_scheduler_s3 = optim.lr_scheduler.StepLR(optimizer_s3, step_size=5, gamma=0.1, last_epoch=-1)
 
-    max_epoch = 2
+    max_epoch = 20
 
     epoch = 0
     while epoch < max_epoch:
@@ -490,7 +504,16 @@ def main():
         #for data_loader_idx in range(len(dis_train_data_loaders)):
         for data_loader_idx in range(len(dis_train_data_loaders)):
             train_data_loader = dis_train_data_loaders[data_loader_idx]
-            net.module.change_fpn(data_loader_idx)
+
+            if epoch >= 7:
+                if not fpn_weights_transferred:
+                    net.module.transfer_fpn_weights()
+                    fpn_weights_transferred = True
+                if epoch >= 10:
+                    net.module.change_fpn(int(data_loader_idx/area_in_network))
+            #if not next(net.module.fpn_net.parameters()).is_cuda:
+            #    net.module.fpn_net.cuda()
+
             #test_data_loader = dis_test_data_loaders[data_loader_idx]
             #train_data_loader = DataLoader(dis_train_sets[data_loader_idx], batch_size=48,
             #                              shuffle=True, num_workers=2)
@@ -536,6 +559,9 @@ def main():
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         torch.save(net.state_dict(), save_path + '/model_epoch{}.pkl'.format(epoch))
+
+        for i in range(16):
+            torch.save(net.module.fpn_nets[i], save_path + '/fpn_{}.pkl'.format(i))
 
         for data_loader_idx in range(len(dis_test_data_loaders)):
             test_data_loader = dis_test_data_loaders[data_loader_idx]
