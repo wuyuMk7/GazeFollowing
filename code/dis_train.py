@@ -441,12 +441,13 @@ def main():
     ##print(next(net.module.fpn_net.parameters()).is_cuda)
     area_count = 8
     area_in_network = int(16/area_count)
+    cur_area_idx = 0
     fpn_weights_transferred = False
     for i in range(area_count):
         net.module.change_fpn(i)
         if not next(net.module.fpn_net.parameters()).is_cuda:
             net.module.fpn_net.cuda()
-    net.module.change_fpn(0)
+    net.module.change_fpn(cur_area_idx)
     ##print(next(net.module.fpn_net.parameters()).is_cuda)
     #exit(0)
 
@@ -472,21 +473,45 @@ def main():
                                {'params': net.module.fusion.parameters(),
                                 'initial_lr': learning_rate}],
                               lr=learning_rate, weight_decay=0.0001)
-    optimizer_s2 = optim.Adam([{'params': net.module.fpn_net.parameters(),
-                                'initial_lr': learning_rate}],
-                              lr=learning_rate, weight_decay=0.0001)
-
-    optimizer_s3 = optim.Adam([{'params': net.parameters(), 'initial_lr': learning_rate}],
-                              lr=learning_rate * 0.1, weight_decay=0.0001)
+    #optimizer_s2 = optim.Adam([{'params': net.module.fpn_net.parameters(),
+    #                            'initial_lr': learning_rate}],
+    #                          lr=learning_rate, weight_decay=0.0001)
+    optimizer_s2s, optimizer_s3s = [], []
+    for i in range(area_count):
+        net.module.change_fpn(i)
+        optimizer_s2 = optim.Adam([{'params': net.module.fpn_nets[i].parameters(),
+                                    'initial_lr': learning_rate}],
+                                    lr=learning_rate, weight_decay=0.0001)
+        optimizer_s3 = optim.Adam([{'params': net.parameters(), 
+                                    'initial_lr': learning_rate}],
+                                    lr=learning_rate * 0.1, weight_decay=0.0001)
+        optimizer_s2s.append(optimizer_s2)
+        optimizer_s3s.append(optimizer_s3)
+    optimizer_s2 = optimizer_s2s[0]
+    optimizer_s3 = optimizer_s3s[0]
 
     lr_scheduler_s1 = optim.lr_scheduler.StepLR(optimizer_s1, step_size=5, gamma=0.1, last_epoch=-1)
-    lr_scheduler_s2 = optim.lr_scheduler.StepLR(optimizer_s2, step_size=5, gamma=0.1, last_epoch=-1)
-    lr_scheduler_s3 = optim.lr_scheduler.StepLR(optimizer_s3, step_size=5, gamma=0.1, last_epoch=-1)
+    #lr_scheduler_s2 = optim.lr_scheduler.StepLR(optimizer_s2, step_size=5, gamma=0.1, last_epoch=-1)
+    lr_scheduler_s2s, lr_scheduler_s3s = [], []
+    for i in range(area_count):
+        lr_scheduler_s2 = optim.lr_scheduler.StepLR(optimizer_s2s[i], step_size=5, 
+                gamma=0.1, last_epoch=-1)
+        lr_scheduler_s3 = optim.lr_scheduler.StepLR(optimizer_s3s[i], step_size=5, 
+                gamma=0.1, last_epoch=-1)
+        lr_scheduler_s2s.append(lr_scheduler_s2)
+        lr_scheduler_s3s.append(lr_scheduler_s3)
+    lr_scheduler_s2 = lr_scheduler_s2s[0]
+    lr_scheduler_s3 = lr_scheduler_s3s[0]
+
+    # Set the model to use the first FPN
+    net.module.change_fpn(cur_area_idx)
 
     max_epoch = 20
 
     epoch = 0
+    #epoch = 7
     while epoch < max_epoch:
+        logging.info('\n--- Epoch: %s\n' % str(epoch))
         if epoch == 0:
             lr_scheduler = lr_scheduler_s1
             optimizer = optimizer_s1
@@ -497,7 +522,8 @@ def main():
             lr_scheduler = lr_scheduler_s3
             optimizer = optimizer_s3
 
-        lr_scheduler.step()
+        #lr_scheduler.step()
+        #lr_scheduler.step()
 
         running_loss = []
         
@@ -505,12 +531,23 @@ def main():
         for data_loader_idx in range(len(dis_train_data_loaders)):
             train_data_loader = dis_train_data_loaders[data_loader_idx]
 
-            if epoch >= 7:
-                if not fpn_weights_transferred:
-                    net.module.transfer_fpn_weights()
-                    fpn_weights_transferred = True
-                if epoch >= 10:
-                    net.module.change_fpn(int(data_loader_idx/area_in_network))
+            if epoch >= 10:
+            #if epoch >= 7:
+                #if not fpn_weights_transferred:
+                #    net.module.transfer_fpn_weights()
+                #    fpn_weights_transferred = True
+
+                area_idx = int(data_loader_idx/area_in_network)
+                if cur_area_idx != area_idx:
+                    cur_area_idx = area_idx
+                    net.module.change_fpn(cur_area_idx)
+                    if epoch < 15:
+                        lr_scheduler = lr_scheduler_s2s[cur_area_idx]
+                        optimizer = optimizer_s2s[cur_area_idx]
+                    else:
+                        lr_scheduler = lr_scheduler_s3s[cur_area_idx]
+                        optimizer = optimizer_s3s[cur_area_idx]
+
             #if not next(net.module.fpn_net.parameters()).is_cuda:
             #    net.module.fpn_net.cuda()
 
@@ -550,9 +587,10 @@ def main():
                 running_loss.append([heatmap_loss.item(),
                                      m_angle_loss.item(), loss.item()])
                 if i % 10 == 9:
-                    logging.info('%s %s %s' % (str(np.mean(running_loss, axis=0)), method, str(lr_scheduler.get_lr())))
+                    logging.info('%s %s %s' % (str(np.mean(running_loss, axis=0)), method, str(lr_scheduler.get_last_lr())))
                     running_loss = []
 
+        lr_scheduler.step()
         epoch += 1
 
         save_path = '../model/two_stage_fpn_concat_multi_scale_' + method
@@ -565,6 +603,9 @@ def main():
 
         for data_loader_idx in range(len(dis_test_data_loaders)):
             test_data_loader = dis_test_data_loaders[data_loader_idx]
+            if epoch >= 10:
+                area_idx = int(data_loader_idx/area_in_network)
+                net.module.change_fpn(area_idx)
             test(net, test_data_loader)
 
 
