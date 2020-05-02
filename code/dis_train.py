@@ -533,9 +533,9 @@ def main():
 
             if epoch >= 10:
             #if epoch >= 7:
-                #if not fpn_weights_transferred:
-                #    net.module.transfer_fpn_weights()
-                #    fpn_weights_transferred = True
+                if not fpn_weights_transferred:
+                    net.module.transfer_fpn_weights()
+                    fpn_weights_transferred = True
 
                 area_idx = int(data_loader_idx/area_in_network)
                 if cur_area_idx != area_idx:
@@ -572,7 +572,8 @@ def main():
                 heatmap_loss, m_angle_loss = \
                     F_loss(direction, predict_heatmap, eye_position, gt_position, gt_heatmap)
 
-                if epoch == 0:
+                #if epoch == 0:
+                if epoch < 7:
                     loss = m_angle_loss
                 elif epoch >= 7 and epoch <= 14:
                     loss = heatmap_loss
@@ -599,13 +600,14 @@ def main():
         torch.save(net.state_dict(), save_path + '/model_epoch{}.pkl'.format(epoch))
 
         for i in range(16):
-            torch.save(net.module.fpn_nets[i], save_path + '/fpn_{}.pkl'.format(i))
+            torch.save(net.module.fpn_nets[i].state_dict(), save_path + '/fpn_{}.pkl'.format(i))
 
         for data_loader_idx in range(len(dis_test_data_loaders)):
             test_data_loader = dis_test_data_loaders[data_loader_idx]
-            if epoch >= 10:
+            if epoch > 10:
                 area_idx = int(data_loader_idx/area_in_network)
                 net.module.change_fpn(area_idx)
+                cur_area_idx = area_idx
             test(net, test_data_loader)
 
 
