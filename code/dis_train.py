@@ -427,9 +427,9 @@ def main():
 
     dis_train_data_loaders, dis_test_data_loaders = [], []
     for i in range(16):
-        dis_train_data_loaders.append(DataLoader(dis_train_sets[i], batch_size=48,
+        dis_train_data_loaders.append(DataLoader(dis_train_sets[i], batch_size=40,
                                       shuffle=True, num_workers=8))
-        dis_test_data_loaders.append(DataLoader(dis_test_sets[i], batch_size=32,
+        dis_test_data_loaders.append(DataLoader(dis_test_sets[i], batch_size=16,
                                      shuffle=False, num_workers=1))
 
     net = GazeNet()
@@ -506,7 +506,7 @@ def main():
     # Set the model to use the first FPN
     net.module.change_fpn(cur_area_idx)
 
-    max_epoch = 20
+    max_epoch = 30
 
     epoch = 0
     #epoch = 7
@@ -572,8 +572,8 @@ def main():
                 heatmap_loss, m_angle_loss = \
                     F_loss(direction, predict_heatmap, eye_position, gt_position, gt_heatmap)
 
-                #if epoch == 0:
-                if epoch < 7:
+                if epoch == 0:
+                #if epoch < 7:
                     loss = m_angle_loss
                 elif epoch >= 7 and epoch <= 14:
                     loss = heatmap_loss
@@ -597,7 +597,8 @@ def main():
         save_path = '../model/two_stage_fpn_concat_multi_scale_' + method
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        torch.save(net.state_dict(), save_path + '/model_epoch{}.pkl'.format(epoch))
+        if epoch % 5 == 0:
+            torch.save(net.state_dict(), save_path + '/model_epoch{}.pkl'.format(epoch))
 
         for i in range(16):
             torch.save(net.module.fpn_nets[i].state_dict(), save_path + '/fpn_{}.pkl'.format(i))
