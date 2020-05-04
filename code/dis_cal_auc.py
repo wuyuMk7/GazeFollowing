@@ -46,6 +46,21 @@ print(score)
 test_mat_file='../../test_data/test2_annotations.mat'
 prediction_file = '../npzs/multi_scale_concat_heatmaps.npz'
 
+mat = loadmat(test_mat_file)
+N = mat['test_path'].shape[0]
+
+gazes_list = [ [] for _ in range(16)]
+eyes_list = [ [] for _ in range(16) ]
+
+for i in range(N):
+    eye_x, eye_y = mat['test_eyes'][0][i][0][0], mat['test_eyes'][0][i][0][1]
+    r_idx, c_idx = int(eye_y / 0.25), int(eye_x / 0.25)
+    w_idx = r_idx * 4 + c_idx
+
+    gazes_list[w_idx].append(mat['test_gaze'][0][i])
+    eyes_list[w_idx].append(mat['test_eyes'][0][i])
+
+'''
 anns = loadmat(test_mat_file)
 gazes = anns['test_gaze']
 eyes = anns['test_eyes']
@@ -79,9 +94,10 @@ pred_list = np.stack(pred_list).reshape([-1])
 
 score = roc_auc_score(gt_list, pred_list)
 print("auc score", score)
+'''
 
-for i in range(16):
-    prediction_file = '../npzs/multi_scale_concat_heatmaps_{}.npz'.format(str(i))
+for dataset_idx in range(16):
+    prediction_file = '../npzs/multi_scale_concat_heatmaps_{}.npz'.format(str(dataset_idx))
     
     prediction = np.load(prediction_file)['heatmaps']
     #print(prediction.shape)
@@ -90,8 +106,10 @@ for i in range(16):
     error_list = []
     for i in range(prediction.shape[0]):
         pred = prediction[i, :, :]
-        eye_point = eyes[0, i][0]
-        gt_points = gazes[0, i]
+        #eye_point = eyes[0, i][0]
+        #gt_points = gazes[0, i]
+        eye_point = eyes_list[dataset_idx][i][0]
+        gt_points = gazes_list[dataset_idx][i]
         pred = cv2.resize(pred, (5, 5))
         #pred[...] = 0.0
         #pred[2, 2] = 1.0
