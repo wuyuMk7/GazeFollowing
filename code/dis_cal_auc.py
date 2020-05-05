@@ -96,6 +96,7 @@ score = roc_auc_score(gt_list, pred_list)
 print("auc score", score)
 '''
 
+means_list, aucs_list = [], []
 for dataset_idx in range(16):
     prediction_file = '../npzs/multi_scale_concat_heatmaps_{}.npz'.format(str(dataset_idx))
     
@@ -129,5 +130,11 @@ for dataset_idx in range(16):
     
     score = roc_auc_score(gt_list, pred_list)
     print("auc score", score)
+
+    means_list.append(np.mean(error_list))
+    aucs_list.append(score)
+
+print("Mean value:", np.mean(np.array(means_list)))
+print("AUC score:", np.mean(np.array(aucs_list)))
     
     
